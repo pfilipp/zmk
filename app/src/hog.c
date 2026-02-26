@@ -90,6 +90,13 @@ static struct hids_report mouse_feature = {
 
 #endif // IS_ENABLED(CONFIG_ZMK_POINTING)
 
+#if IS_ENABLED(CONFIG_ZMK_HID_LAYER_STATE_REPORT)
+static struct hids_report layer_state_input = {
+    .id = ZMK_HID_REPORT_ID_LAYER_STATE,
+    .type = HIDS_INPUT,
+};
+#endif
+
 static bool host_requests_notification = false;
 static uint8_t ctrl_point;
 // static uint8_t proto_mode;
@@ -222,6 +229,15 @@ static ssize_t write_hids_mouse_feature_report(struct bt_conn *conn,
 
 #endif // IS_ENABLED(CONFIG_ZMK_POINTING)
 
+#if IS_ENABLED(CONFIG_ZMK_HID_LAYER_STATE_REPORT)
+static ssize_t read_hids_layer_state_report(struct bt_conn *conn,
+                                            const struct bt_gatt_attr *attr,
+                                            void *buf, uint16_t len, uint16_t offset) {
+    struct zmk_hid_layer_state_report_body *report = &zmk_hid_get_layer_state_report()->body;
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, report, sizeof(*report));
+}
+#endif
+
 // static ssize_t write_proto_mode(struct bt_conn *conn,
 //                                 const struct bt_gatt_attr *attr,
 //                                 const void *buf, uint16_t len, uint16_t offset,
@@ -296,6 +312,14 @@ BT_GATT_SERVICE_DEFINE(
     BT_GATT_DESCRIPTOR(BT_UUID_HIDS_REPORT_REF, BT_GATT_PERM_READ_ENCRYPT, read_hids_report_ref,
                        NULL, &led_indicators),
 #endif // IS_ENABLED(CONFIG_ZMK_HID_INDICATORS)
+
+#if IS_ENABLED(CONFIG_ZMK_HID_LAYER_STATE_REPORT)
+    BT_GATT_CHARACTERISTIC(BT_UUID_HIDS_REPORT, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
+                           BT_GATT_PERM_READ_ENCRYPT, read_hids_layer_state_report, NULL, NULL),
+    BT_GATT_CCC(input_ccc_changed, BT_GATT_PERM_READ_ENCRYPT | BT_GATT_PERM_WRITE_ENCRYPT),
+    BT_GATT_DESCRIPTOR(BT_UUID_HIDS_REPORT_REF, BT_GATT_PERM_READ_ENCRYPT,
+                       read_hids_report_ref, NULL, &layer_state_input),
+#endif
 
     BT_GATT_CHARACTERISTIC(BT_UUID_HIDS_CTRL_POINT, BT_GATT_CHRC_WRITE_WITHOUT_RESP,
                            BT_GATT_PERM_WRITE, NULL, write_ctrl_point, &ctrl_point));
@@ -461,6 +485,64 @@ int zmk_hog_send_mouse_report(struct zmk_hid_mouse_report_body *report) {
     return 0;
 };
 #endif // IS_ENABLED(CONFIG_ZMK_POINTING)
+
+#if IS_ENABLED(CONFIG_ZMK_HID_LAYER_STATE_REPORT)
+
+#define HOG_LAYER_STATE_ATTR_INDEX                                                                 \
+    (13 + (IS_ENABLED(CONFIG_ZMK_POINTING) ? 4 : 0) +                                             \
+     (IS_ENABLED(CONFIG_ZMK_POINTING_SMOOTH_SCROLLING) ? 3 : 0) +                                 \
+     (IS_ENABLED(CONFIG_ZMK_HID_INDICATORS) ? 3 : 0))
+
+K_MSGQ_DEFINE(zmk_hog_layer_state_msgq, sizeof(struct zmk_hid_layer_state_report_body),
+              CONFIG_ZMK_BLE_LAYER_STATE_REPORT_QUEUE_SIZE, 4);
+
+void send_layer_state_report_callback(struct k_work *work) {
+    struct zmk_hid_layer_state_report_body report;
+    while (k_msgq_get(&zmk_hog_layer_state_msgq, &report, K_NO_WAIT) == 0) {
+        struct bt_conn *conn = zmk_ble_active_profile_conn();
+        if (conn == NULL) {
+            return;
+        }
+
+        struct bt_gatt_notify_params notify_params = {
+            .attr = &hog_svc.attrs[HOG_LAYER_STATE_ATTR_INDEX],
+            .data = &report,
+            .len = sizeof(report),
+        };
+
+        int err = bt_gatt_notify_cb(conn, &notify_params);
+        if (err == -EPERM) {
+            bt_conn_set_security(conn, BT_SECURITY_L2);
+        } else if (err) {
+            LOG_DBG("Error notifying layer state: %d", err);
+        }
+
+        bt_conn_unref(conn);
+    }
+}
+
+K_WORK_DEFINE(hog_layer_state_work, send_layer_state_report_callback);
+
+int zmk_hog_send_layer_state_report(struct zmk_hid_layer_state_report_body *report) {
+    int err = k_msgq_put(&zmk_hog_layer_state_msgq, report, K_MSEC(100));
+    if (err) {
+        switch (err) {
+        case -EAGAIN: {
+            LOG_WRN("Layer state message queue full, purging");
+            k_msgq_purge(&zmk_hog_layer_state_msgq);
+            return k_msgq_put(&zmk_hog_layer_state_msgq, report, K_MSEC(100));
+        }
+        default:
+            LOG_WRN("Failed to queue layer state report to send (%d)", err);
+            return err;
+        }
+    }
+
+    k_work_submit_to_queue(&hog_work_q, &hog_layer_state_work);
+
+    return 0;
+}
+#endif // IS_ENABLED(CONFIG_ZMK_HID_LAYER_STATE_REPORT)
 
 static int zmk_hog_init(void) {
     static const struct k_work_queue_config queue_config = {.name = "HID Over GATT Send Work"};

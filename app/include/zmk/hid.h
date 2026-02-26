@@ -76,6 +76,7 @@
 #define ZMK_HID_REPORT_ID_LEDS 0x01
 #define ZMK_HID_REPORT_ID_CONSUMER 0x02
 #define ZMK_HID_REPORT_ID_MOUSE 0x03
+#define ZMK_HID_REPORT_ID_LAYER_STATE 0x04
 
 #ifndef HID_ITEM_TAG_PUSH
 #define HID_ITEM_TAG_PUSH 0xA
@@ -253,6 +254,20 @@ static const uint8_t zmk_hid_report_desc[] = {
     HID_END_COLLECTION,
     HID_END_COLLECTION,
 #endif // IS_ENABLED(CONFIG_ZMK_POINTING)
+
+#if IS_ENABLED(CONFIG_ZMK_HID_LAYER_STATE_REPORT)
+    HID_USAGE_PAGE(HID_USAGE_GEN_DESKTOP),
+    HID_USAGE(HID_USAGE_GD_KEYBOARD),
+    HID_COLLECTION(HID_COLLECTION_APPLICATION),
+    HID_REPORT_ID(ZMK_HID_REPORT_ID_LAYER_STATE),
+    HID_USAGE_PAGE(HID_USAGE_GEN_DESKTOP),
+    HID_LOGICAL_MIN8(0x00),
+    HID_LOGICAL_MAX8(0xFF),
+    HID_REPORT_SIZE(0x08),
+    HID_REPORT_COUNT(0x02),
+    HID_INPUT(ZMK_HID_MAIN_VAL_DATA | ZMK_HID_MAIN_VAL_VAR | ZMK_HID_MAIN_VAL_ABS),
+    HID_END_COLLECTION,
+#endif
 };
 
 #if IS_ENABLED(CONFIG_ZMK_USB_BOOT)
@@ -341,6 +356,18 @@ struct zmk_hid_mouse_resolution_feature_report {
 
 #endif // IS_ENABLED(CONFIG_ZMK_POINTING)
 
+#if IS_ENABLED(CONFIG_ZMK_HID_LAYER_STATE_REPORT)
+struct zmk_hid_layer_state_report_body {
+    uint8_t layer;   // highest active layer index
+    uint8_t locked;  // 1 if the layer is locked, 0 otherwise
+} __packed;
+
+struct zmk_hid_layer_state_report {
+    uint8_t report_id;
+    struct zmk_hid_layer_state_report_body body;
+} __packed;
+#endif
+
 zmk_mod_flags_t zmk_hid_get_explicit_mods(void);
 int zmk_hid_register_mod(zmk_mod_t modifier);
 int zmk_hid_unregister_mod(zmk_mod_t modifier);
@@ -390,3 +417,8 @@ zmk_hid_boot_report_t *zmk_hid_get_boot_report();
 #if IS_ENABLED(CONFIG_ZMK_POINTING)
 struct zmk_hid_mouse_report *zmk_hid_get_mouse_report();
 #endif // IS_ENABLED(CONFIG_ZMK_POINTING)
+
+#if IS_ENABLED(CONFIG_ZMK_HID_LAYER_STATE_REPORT)
+struct zmk_hid_layer_state_report *zmk_hid_get_layer_state_report(void);
+void zmk_hid_layer_state_set(uint8_t layer, uint8_t locked);
+#endif

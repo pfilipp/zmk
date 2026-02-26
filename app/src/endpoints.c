@@ -300,6 +300,35 @@ int zmk_endpoint_send_mouse_report() {
 }
 #endif // IS_ENABLED(CONFIG_ZMK_POINTING)
 
+#if IS_ENABLED(CONFIG_ZMK_HID_LAYER_STATE_REPORT)
+
+static int send_layer_state_report(void) {
+    switch (current_instance.transport) {
+#if IS_ENABLED(CONFIG_ZMK_USB)
+    case ZMK_TRANSPORT_USB: {
+        return zmk_usb_hid_send_layer_state_report();
+    }
+#endif /* IS_ENABLED(CONFIG_ZMK_USB) */
+
+#if IS_ENABLED(CONFIG_ZMK_BLE)
+    case ZMK_TRANSPORT_BLE: {
+        struct zmk_hid_layer_state_report *report = zmk_hid_get_layer_state_report();
+        return zmk_hog_send_layer_state_report(&report->body);
+    }
+#endif /* IS_ENABLED(CONFIG_ZMK_BLE) */
+
+    default:
+        LOG_ERR("Unsupported transport %d", current_instance.transport);
+        return -ENOTSUP;
+    }
+}
+
+int zmk_endpoint_send_layer_state_report(void) {
+    return send_layer_state_report();
+}
+
+#endif /* IS_ENABLED(CONFIG_ZMK_HID_LAYER_STATE_REPORT) */
+
 #if IS_ENABLED(CONFIG_SETTINGS)
 
 // Type for the deprecated SETTING_PREFERRED_TRANSPORT_V1 setting. To maintain backwards

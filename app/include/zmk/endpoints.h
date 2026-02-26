@@ -106,6 +106,10 @@ int zmk_endpoint_send_report(uint16_t usage_page);
 int zmk_endpoint_send_mouse_report();
 #endif // IS_ENABLED(CONFIG_ZMK_POINTING)
 
+#if IS_ENABLED(CONFIG_ZMK_HID_LAYER_STATE_REPORT)
+int zmk_endpoint_send_layer_state_report(void);
+#endif
+
 /**
  * Clears all HID reports for the selected endpoint.
  */

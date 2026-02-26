@@ -123,6 +123,14 @@ config ZMK_HID_INDICATORS
 
 rsource "src/indicators/Kconfig"
 
+config ZMK_HID_LAYER_STATE_REPORT
+    bool "Layer State HID Report"
+    depends on (!ZMK_SPLIT || ZMK_SPLIT_ROLE_CENTRAL)
+    help
+      Enable sending layer state changes to the host via a custom HID
+      input report (Report ID 0x04). The report contains the highest
+      active layer index and its lock state.
+
 config ZMK_HID_SEPARATE_MOD_RELEASE_REPORT
     bool "Release Modifiers Separately"
     help
@@ -219,6 +227,11 @@ config ZMK_BLE_CONSUMER_REPORT_QUEUE_SIZE
 config ZMK_BLE_MOUSE_REPORT_QUEUE_SIZE
     int "Max number of mouse HID reports to queue for sending over BLE"
     default 20
+
+config ZMK_BLE_LAYER_STATE_REPORT_QUEUE_SIZE
+    int "Max number of layer state reports to queue for sending over BLE"
+    default 5
+    depends on ZMK_BLE && ZMK_HID_LAYER_STATE_REPORT
 
 config ZMK_BLE_CLEAR_BONDS_ON_START
     bool "Configuration that clears all bond information from the keyboard on startup."

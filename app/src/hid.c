@@ -477,3 +477,18 @@ struct zmk_hid_consumer_report *zmk_hid_get_consumer_report(void) { return &cons
 struct zmk_hid_mouse_report *zmk_hid_get_mouse_report(void) { return &mouse_report; }
 
 #endif // IS_ENABLED(CONFIG_ZMK_POINTING)
+
+#if IS_ENABLED(CONFIG_ZMK_HID_LAYER_STATE_REPORT)
+static struct zmk_hid_layer_state_report layer_state_report = {
+    .report_id = ZMK_HID_REPORT_ID_LAYER_STATE,
+    .body = {.layer = 0, .locked = 0}};
+
+struct zmk_hid_layer_state_report *zmk_hid_get_layer_state_report(void) {
+    return &layer_state_report;
+}
+
+void zmk_hid_layer_state_set(uint8_t layer, uint8_t locked) {
+    layer_state_report.body.layer = layer;
+    layer_state_report.body.locked = locked;
+}
+#endif

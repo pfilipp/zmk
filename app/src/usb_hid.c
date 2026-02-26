@@ -100,6 +100,14 @@ static int get_report_cb(const struct device *dev, struct usb_setup_packet *setu
             *len = sizeof(*report);
             break;
         }
+#if IS_ENABLED(CONFIG_ZMK_HID_LAYER_STATE_REPORT)
+        case ZMK_HID_REPORT_ID_LAYER_STATE: {
+            struct zmk_hid_layer_state_report *report = zmk_hid_get_layer_state_report();
+            *data = (uint8_t *)report;
+            *len = sizeof(*report);
+            break;
+        }
+#endif
         default:
             LOG_ERR("Invalid report ID %d requested", setup->wValue & HID_GET_REPORT_ID_MASK);
             return -EINVAL;
@@ -234,6 +242,18 @@ int zmk_usb_hid_send_mouse_report() {
     return zmk_usb_hid_send_report((uint8_t *)report, sizeof(*report));
 }
 #endif // IS_ENABLED(CONFIG_ZMK_POINTING)
+
+#if IS_ENABLED(CONFIG_ZMK_HID_LAYER_STATE_REPORT)
+int zmk_usb_hid_send_layer_state_report(void) {
+#if IS_ENABLED(CONFIG_ZMK_USB_BOOT)
+    if (hid_protocol != HID_PROTOCOL_REPORT) {
+        return -ENOTSUP;
+    }
+#endif
+    struct zmk_hid_layer_state_report *report = zmk_hid_get_layer_state_report();
+    return zmk_usb_hid_send_report((uint8_t *)report, sizeof(*report));
+}
+#endif
 
 static int zmk_usb_hid_init(void) {
     hid_dev = device_get_binding("HID_0");
