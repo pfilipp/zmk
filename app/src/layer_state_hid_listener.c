@@ -14,7 +14,8 @@ static int layer_state_hid_listener(const zmk_event_t *eh) {
     zmk_keymap_layer_index_t index = zmk_keymap_highest_layer_active();
     zmk_hid_layer_state_set(index, zmk_keymap_layer_locked(
         zmk_keymap_layer_index_to_id(index)) ? 1 : 0);
-    return zmk_endpoint_send_layer_state_report();
+    zmk_endpoint_send_layer_state_report();
+    return ZMK_EV_EVENT_BUBBLE;
 }
 
 ZMK_LISTENER(layer_state_hid_listener, layer_state_hid_listener);

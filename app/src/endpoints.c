@@ -304,6 +304,9 @@ int zmk_endpoint_send_mouse_report() {
 
 static int send_layer_state_report(void) {
     switch (current_instance.transport) {
+    case ZMK_TRANSPORT_NONE:
+        return 0;
+
 #if IS_ENABLED(CONFIG_ZMK_USB)
     case ZMK_TRANSPORT_USB: {
         return zmk_usb_hid_send_layer_state_report();
