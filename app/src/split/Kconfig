@@ -9,6 +9,33 @@ if ZMK_SPLIT
 config ZMK_SPLIT_ROLE_CENTRAL
     bool "Split central device"
 
+config ZMK_SPLIT_ROLE_DYNAMIC
+    bool "Select the split role at boot from settings"
+    depends on ZMK_SPLIT_BLE
+    select ZMK_SPLIT_ROLE_CENTRAL
+    help
+      Link both the split central and the split peripheral into one image and
+      pick the role at boot from the persisted split mode. The mode is changed
+      with the &split_mode behavior, which reboots the device. Meant for a half
+      that is sometimes a dongle's peripheral and sometimes the central itself.
+
+config ZMK_SPLIT_CENTRAL_MODE_GATE
+    bool "Dongle-side gate for a dynamic-role peripheral"
+    depends on ZMK_SPLIT_ROLE_CENTRAL && !ZMK_SPLIT_ROLE_DYNAMIC
+    help
+      Remember whether a dynamic-role peripheral switched to standalone mode
+      and, while it has, only accept connections from that peripheral so the
+      other half can be taken by the standalone central.
+
+config ZMK_SPLIT_PERIPHERAL_MULTI_BOND
+    bool "Peripheral accepts connections from any bonded central"
+    depends on ZMK_SPLIT_BLE && !ZMK_SPLIT_ROLE_CENTRAL
+    select BT_FILTER_ACCEPT_LIST
+    help
+      Keep bonds to two centrals and advertise with a filter accept list
+      containing all of them, so the peripheral follows whichever central is
+      active without re-pairing.
+
 config ZMK_SPLIT_BLE
     bool "BLE Split"
     default y

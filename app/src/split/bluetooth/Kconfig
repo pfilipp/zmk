@@ -91,6 +91,7 @@ config ZMK_SPLIT_BLE_PERIPHERAL_POSITION_QUEUE_SIZE
     default 10
 
 config BT_MAX_PAIRED
+    default 2 if ZMK_SPLIT_PERIPHERAL_MULTI_BOND
     default 1
 
 config BT_MAX_CONN

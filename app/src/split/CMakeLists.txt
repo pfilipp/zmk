@@ -16,3 +16,5 @@ else()
     target_sources(app PRIVATE peripheral.c)
     zephyr_linker_sources(SECTIONS ../../include/linker/zmk-split-transport-peripheral.ld)
 endif()
+
+target_sources_ifdef(CONFIG_ZMK_SPLIT_ROLE_DYNAMIC app PRIVATE role.c)
