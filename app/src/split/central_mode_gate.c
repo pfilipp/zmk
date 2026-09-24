@@ -44,7 +44,11 @@ bool zmk_split_central_mode_gate_allows(const bt_addr_le_t *addr) {
     }
 
     const bt_addr_le_t *left = zmk_ble_peripheral_addr(left_slot);
-    return left != NULL && bt_addr_le_cmp(addr, left) == 0;
+    if (left == NULL || bt_addr_le_cmp(left, BT_ADDR_LE_ANY) == 0) {
+        /* Slot address unknown (e.g. bonds cleared): do not lock everyone out. */
+        return true;
+    }
+    return bt_addr_le_cmp(addr, left) == 0;
 }
 
 static void disconnect_peripheral(struct bt_conn *conn, void *data) {
@@ -77,6 +81,13 @@ int zmk_split_central_mode_gate_enter_standalone(uint8_t slot) {
 }
 
 void zmk_split_central_mode_gate_peripheral_connected(int slot) {
+    if (k_work_delayable_is_pending(&disconnect_work)) {
+        /* The standalone half re-advertised to us while we were still dropping links; a
+         * reconnect now does not mean it came back. Repeated SM_HOST presses also land here. */
+        LOG_DBG("Ignoring peripheral reconnect during the switch to standalone");
+        return;
+    }
+
     if (mode == ZMK_SPLIT_MODE_STANDALONE && slot >= 0 && slot == left_slot) {
         mode = ZMK_SPLIT_MODE_DONGLE;
         LOG_INF("Standalone peripheral is back; dongle mode");

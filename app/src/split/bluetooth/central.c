@@ -900,6 +900,11 @@ static int start_scanning(void) {
         return 0;
     }
 
+    if (zmk_split_role_switch_pending()) {
+        LOG_DBG("Mode switch pending; not scanning");
+        return 0;
+    }
+
     // No action is necessary if central is already scanning.
     if (is_scanning) {
         LOG_DBG("Scanning already running");
@@ -970,6 +975,14 @@ static void split_central_disconnected(struct bt_conn *conn, uint8_t reason) {
     bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
 
     LOG_DBG("Disconnected: %s (reason %d)", addr, reason);
+
+    struct bt_conn_info info;
+    bt_conn_get_info(conn, &info);
+
+    if (info.role != BT_CONN_ROLE_CENTRAL) {
+        LOG_DBG("SKIPPING FOR ROLE %d", info.role);
+        return;
+    }
 
 #if IS_ENABLED(CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING)
     struct peripheral_event_wrapper ev = {

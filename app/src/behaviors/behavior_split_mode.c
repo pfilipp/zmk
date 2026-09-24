@@ -49,6 +49,8 @@ static void disconnect_conn(struct bt_conn *conn, void *data) {
 }
 
 static void switch_work_cb(struct k_work *work) {
+    /* Block every advertising/scanning restart that the disconnects would otherwise trigger. */
+    zmk_split_role_set_switch_pending();
     bt_conn_foreach(BT_CONN_TYPE_LE, disconnect_conn, NULL);
     k_work_schedule(&reboot_work, K_MSEC(REBOOT_DELAY_MS));
 }

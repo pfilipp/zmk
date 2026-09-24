@@ -6,10 +6,13 @@
 
 #include <errno.h>
 #include <zephyr/settings/settings.h>
+#include <zephyr/bluetooth/conn.h>
 #include <zephyr/logging/log.h>
 
+#include <zmk/ble.h>
 #include <zmk/split/role.h>
 
+/* `depends on SETTINGS` in Kconfig would close a dependency loop through ZMK_USB, so assert here. */
 BUILD_ASSERT(IS_ENABLED(CONFIG_SETTINGS), "ZMK_SPLIT_ROLE_DYNAMIC requires CONFIG_SETTINGS");
 
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
@@ -17,6 +20,7 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 static uint8_t current_mode = ZMK_SPLIT_MODE_DONGLE;
 static bt_addr_le_t dongle_addr;
 static bool dongle_addr_known = false;
+static bool switch_pending = false;
 
 bool zmk_split_role_is_central(void) { return current_mode == ZMK_SPLIT_MODE_STANDALONE; }
 
@@ -36,6 +40,23 @@ int zmk_split_role_set_dongle_addr(const bt_addr_le_t *addr) {
     dongle_addr_known = true;
     return settings_save_one("split/dongle_addr", &dongle_addr, sizeof(dongle_addr));
 }
+
+void zmk_split_role_note_central_conn(struct bt_conn *conn) {
+    const bt_addr_le_t *peer = bt_conn_get_dst(conn);
+
+    if (dongle_addr_known || zmk_ble_profile_index(peer) >= 0) {
+        return;
+    }
+
+    char addr[BT_ADDR_LE_STR_LEN];
+    bt_addr_le_to_str(peer, addr, sizeof(addr));
+    LOG_INF("Recording %s as the dongle", addr);
+    zmk_split_role_set_dongle_addr(peer);
+}
+
+bool zmk_split_role_switch_pending(void) { return switch_pending; }
+
+void zmk_split_role_set_switch_pending(void) { switch_pending = true; }
 
 static int role_settings_set(const char *name, size_t len, settings_read_cb read_cb,
                              void *cb_arg) {

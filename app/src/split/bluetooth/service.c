@@ -25,6 +25,7 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #include <zmk/split/transport/peripheral.h>
 #include <zmk/split/bluetooth/uuid.h>
 #include <zmk/split/bluetooth/service.h>
+#include <zmk/split/role.h>
 
 #include "peripheral.h"
 
@@ -115,6 +116,9 @@ static K_WORK_DEFINE(split_svc_select_phys_layout_work, split_svc_select_phys_la
 static ssize_t split_svc_select_phys_layout(struct bt_conn *conn, const struct bt_gatt_attr *attr,
                                             const void *buf, uint16_t len, uint16_t offset,
                                             uint8_t flags) {
+#if IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_DYNAMIC)
+    zmk_split_role_note_central_conn(conn);
+#endif
     if (offset + len > sizeof(uint8_t) || len == 0) {
         return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
     }
@@ -386,6 +390,9 @@ int zmk_split_transport_peripheral_bt_report_event(
 static ssize_t split_svc_run_behavior(struct bt_conn *conn, const struct bt_gatt_attr *attrs,
                                       const void *buf, uint16_t len, uint16_t offset,
                                       uint8_t flags) {
+#if IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_DYNAMIC)
+    zmk_split_role_note_central_conn(conn);
+#endif
     struct zmk_split_run_behavior_payload *payload = attrs->user_data;
     uint16_t end_addr = offset + len;
 

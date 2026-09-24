@@ -188,6 +188,10 @@ int update_advertising(void) {
         return 0;
     }
 
+    if (zmk_split_role_switch_pending()) {
+        return 0;
+    }
+
     int err = 0;
     bt_addr_le_t *addr;
     struct bt_conn *conn;

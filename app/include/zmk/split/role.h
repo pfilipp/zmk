@@ -16,6 +16,8 @@ enum zmk_split_mode {
     ZMK_SPLIT_MODE_STANDALONE = 1, /* this half is the split central and talks to hosts */
 };
 
+struct bt_conn;
+
 #if IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_DYNAMIC)
 
 bool zmk_split_role_is_central(void);
@@ -27,10 +29,21 @@ int zmk_split_role_set_mode(enum zmk_split_mode mode);
 const bt_addr_le_t *zmk_split_role_dongle_addr(void);
 int zmk_split_role_set_dongle_addr(const bt_addr_le_t *addr);
 
+/* Called when a connected central proves it is a ZMK split central (it wrote to the split
+ * service). Records it as the dongle if none is known yet and it is not a bonded host. */
+void zmk_split_role_note_central_conn(struct bt_conn *conn);
+
+/* True from the moment a mode switch starts dropping links until the reboot. While set, no
+ * split transport or host advertising may restart. */
+bool zmk_split_role_switch_pending(void);
+void zmk_split_role_set_switch_pending(void);
+
 #else
 
 static inline bool zmk_split_role_is_central(void) {
     return !IS_ENABLED(CONFIG_ZMK_SPLIT) || IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL);
 }
+
+static inline bool zmk_split_role_switch_pending(void) { return false; }
 
 #endif /* IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_DYNAMIC) */

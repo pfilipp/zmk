@@ -107,9 +107,11 @@ static void add_bond_to_accept_list(const struct bt_bond_info *info, void *user_
     (*count)++;
 }
 
-/* Advertise to every bonded central at once; whichever is currently the active central connects.
- * Interval matches the low-duty directed advertising the single-bond path settles into, so idle
- * power is comparable. The low_duty flag is meaningless for undirected advertising. */
+/* Undirected advertising serves every central at once; whichever is currently the active central
+ * connects. Until the bond table is full it stays open so the next central can pair; once full,
+ * the accept list restricts connections to the bonded centrals. Interval matches the low-duty
+ * directed advertising the single-bond path settles into, so idle power is comparable. The
+ * low_duty flag is meaningless for undirected advertising. */
 static int start_advertising(bool low_duty) {
     ARG_UNUSED(low_duty);
     int count = 0;
@@ -121,9 +123,10 @@ static int start_advertising(bool low_duty) {
     }
 
     bt_foreach_bond(BT_ID_DEFAULT, add_bond_to_accept_list, &count);
+    is_bonded = count > 0;
 
-    if (count > 0) {
-        is_bonded = true;
+    if (count >= CONFIG_BT_MAX_PAIRED) {
+        /* Every central we will ever have is bonded: only they may connect. */
         return bt_le_adv_start(BT_LE_ADV_PARAM(BT_LE_ADV_OPT_CONN | BT_LE_ADV_OPT_FILTER_CONN |
                                                    BT_LE_ADV_OPT_FILTER_SCAN_REQ,
                                                BT_GAP_ADV_FAST_INT_MIN_2, BT_GAP_ADV_FAST_INT_MAX_2,
@@ -131,7 +134,8 @@ static int start_advertising(bool low_duty) {
                                zmk_ble_ad, ARRAY_SIZE(zmk_ble_ad), NULL, 0);
     }
 
-    is_bonded = false;
+    /* Room for another central: advertise openly so it can pair. The dongle's mode gate and the
+     * dynamic-role half's role gating keep the wrong central away meanwhile. */
     return bt_le_adv_start(BT_LE_ADV_CONN_FAST_2, zmk_ble_ad, ARRAY_SIZE(zmk_ble_ad), NULL, 0);
 }
 
@@ -141,6 +145,11 @@ static bool low_duty_advertising = false;
 static bool enabled = false;
 
 static void advertising_cb(struct k_work *work) {
+    if (zmk_split_role_switch_pending()) {
+        LOG_DBG("Mode switch pending; not restarting advertising");
+        return;
+    }
+
     const int err = start_advertising(low_duty_advertising);
     if (err < 0) {
         LOG_ERR("Failed to start advertising (%d)", err);
@@ -197,14 +206,6 @@ static void security_changed(struct bt_conn *conn, bt_security_t level, enum bt_
 
     if (!err) {
         LOG_DBG("Security changed: %s level %u", addr, level);
-#if IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_DYNAMIC)
-        /* Never record a bonded host as the dongle; the host guard's disconnect is asynchronous. */
-        if (level >= BT_SECURITY_L2 && !zmk_split_role_dongle_addr() &&
-            zmk_ble_profile_index(bt_conn_get_dst(conn)) < 0) {
-            LOG_INF("Recording %s as the dongle", addr);
-            zmk_split_role_set_dongle_addr(bt_conn_get_dst(conn));
-        }
-#endif
     } else {
         LOG_ERR("Security failed: %s level %u err %d", addr, level, err);
     }
