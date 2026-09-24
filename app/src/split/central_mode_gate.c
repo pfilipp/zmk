@@ -28,11 +28,14 @@ static uint8_t mode = ZMK_SPLIT_MODE_DONGLE;
 static uint8_t left_slot = LEFT_SLOT_UNKNOWN;
 
 static int persist(void) {
-    int err = settings_save_one("split/mode", &mode, sizeof(mode));
+    /* Write left_slot before mode: if we fail partway through, a stale/unknown slot with
+     * mode=standalone is safe (allows() treats an unknown slot as an open gate), while a new
+     * slot with the old mode is also harmless either way. */
+    int err = settings_save_one("split/left_slot", &left_slot, sizeof(left_slot));
     if (err) {
         return err;
     }
-    return settings_save_one("split/left_slot", &left_slot, sizeof(left_slot));
+    return settings_save_one("split/mode", &mode, sizeof(mode));
 }
 
 bool zmk_split_central_mode_gate_allows(const bt_addr_le_t *addr) {
@@ -62,15 +65,15 @@ int zmk_split_central_mode_gate_enter_standalone(uint8_t slot) {
     mode = ZMK_SPLIT_MODE_STANDALONE;
     left_slot = slot;
 
+    /* Runtime state is authoritative for this session; a failed persist only affects the next boot. */
     int err = persist();
     if (err) {
         LOG_ERR("Failed to persist standalone mode (%d)", err);
-        return err;
     }
 
     LOG_INF("Peripheral in slot %d goes standalone; releasing peripherals", slot);
     k_work_schedule(&disconnect_work, K_MSEC(DISCONNECT_DELAY_MS));
-    return 0;
+    return err;
 }
 
 void zmk_split_central_mode_gate_peripheral_connected(int slot) {
