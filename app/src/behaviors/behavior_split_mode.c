@@ -94,7 +94,20 @@ static int handle_pressed(struct zmk_behavior_binding *binding,
 
 static int handle_pressed(struct zmk_behavior_binding *binding,
                           struct zmk_behavior_binding_event event) {
-    /* TASK6: dongle branch */
+    if (binding->param1 != SPLIT_MODE_HOST_CMD) {
+        /* Back to dongle mode is signalled by the standalone half reconnecting to us. */
+        return ZMK_BEHAVIOR_OPAQUE;
+    }
+
+    if (event.source == ZMK_POSITION_STATE_CHANGE_SOURCE_LOCAL) {
+        LOG_WRN("split_mode pressed on the dongle itself; ignoring");
+        return ZMK_BEHAVIOR_OPAQUE;
+    }
+
+    int err = zmk_split_central_mode_gate_enter_standalone(event.source);
+    if (err) {
+        LOG_ERR("Failed to enter standalone mode (%d)", err);
+    }
     return ZMK_BEHAVIOR_OPAQUE;
 }
 

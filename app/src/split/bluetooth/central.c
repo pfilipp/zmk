@@ -33,6 +33,10 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #include <zmk/pointing/input_split.h>
 #include <zmk/hid_indicators_types.h>
 #include <zmk/physical_layouts.h>
+
+#if IS_ENABLED(CONFIG_ZMK_SPLIT_CENTRAL_MODE_GATE)
+#include <zmk/split/central_mode_gate.h>
+#endif
 #include <zmk/split/role.h>
 
 static int start_scanning(void);
@@ -796,6 +800,13 @@ static int stop_scanning(void) {
 }
 
 static bool split_central_eir_found(const bt_addr_le_t *addr) {
+#if IS_ENABLED(CONFIG_ZMK_SPLIT_CENTRAL_MODE_GATE)
+    if (!zmk_split_central_mode_gate_allows(addr)) {
+        LOG_DBG("Mode gate: ignoring peripheral while standalone");
+        return false;
+    }
+#endif
+
     LOG_DBG("Found the split service");
 
     // Reserve peripheral slot. Once the central has bonded to its peripherals,
@@ -945,6 +956,9 @@ static void split_central_connected(struct bt_conn *conn, uint8_t conn_err) {
     LOG_DBG("Connected: %s", addr);
 
     confirm_peripheral_slot_conn(conn);
+#if IS_ENABLED(CONFIG_ZMK_SPLIT_CENTRAL_MODE_GATE)
+    zmk_split_central_mode_gate_peripheral_connected(peripheral_slot_index_for_conn(conn));
+#endif
     split_central_process_connection(conn);
     k_work_submit(&notify_status_work);
 }

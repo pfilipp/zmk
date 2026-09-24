@@ -20,3 +20,4 @@ if (NOT CONFIG_ZMK_SPLIT_ROLE_CENTRAL OR CONFIG_ZMK_SPLIT_ROLE_DYNAMIC)
 endif()
 
 target_sources_ifdef(CONFIG_ZMK_SPLIT_ROLE_DYNAMIC app PRIVATE role.c)
+target_sources_ifdef(CONFIG_ZMK_SPLIT_CENTRAL_MODE_GATE app PRIVATE central_mode_gate.c)
