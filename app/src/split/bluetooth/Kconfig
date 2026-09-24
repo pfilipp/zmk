@@ -76,7 +76,8 @@ config ZMK_SPLIT_BLE_PREF_TIMEOUT
 
 endif # ZMK_SPLIT_ROLE_CENTRAL
 
-if !ZMK_SPLIT_ROLE_CENTRAL
+# Also needed by a dynamic-role build, which links the peripheral transport alongside the central.
+if !ZMK_SPLIT_ROLE_CENTRAL || ZMK_SPLIT_ROLE_DYNAMIC
 
 config ZMK_SPLIT_BLE_PERIPHERAL_STACK_SIZE
     int "BLE split peripheral notify thread stack size"
@@ -89,6 +90,10 @@ config ZMK_SPLIT_BLE_PERIPHERAL_PRIORITY
 config ZMK_SPLIT_BLE_PERIPHERAL_POSITION_QUEUE_SIZE
     int "Max number of key position state events to queue to send to the central"
     default 10
+
+endif # !ZMK_SPLIT_ROLE_CENTRAL || ZMK_SPLIT_ROLE_DYNAMIC
+
+if !ZMK_SPLIT_ROLE_CENTRAL
 
 config BT_MAX_PAIRED
     default 2 if ZMK_SPLIT_PERIPHERAL_MULTI_BOND

@@ -37,6 +37,7 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #include <zmk/events/split_peripheral_status_changed.h>
 #include <zmk/ble.h>
 #include <zmk/split/bluetooth/uuid.h>
+#include <zmk/split/role.h>
 
 static const struct bt_data zmk_ble_ad[] = {
     BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
@@ -235,6 +236,11 @@ static void notify_transport_status(void) {
 }
 
 static int zmk_peripheral_ble_complete_startup(void) {
+    if (zmk_split_role_is_central()) {
+        LOG_DBG("Split role is central; BLE split peripheral transport stays unavailable");
+        return 0;
+    }
+
 #if IS_ENABLED(CONFIG_ZMK_BLE_CLEAR_BONDS_ON_START)
     LOG_WRN("Clearing all existing BLE bond information from the keyboard");
 
@@ -269,7 +275,7 @@ static struct settings_handler ble_peripheral_settings_handler = {
 static int zmk_peripheral_ble_init(void) {
     int err = bt_enable(NULL);
 
-    if (err) {
+    if (err < 0 && err != -EALREADY) {
         LOG_ERR("BLUETOOTH FAILED (%d)", err);
         return err;
     }

@@ -1,7 +1,7 @@
 # Copyright (c) 2022 The ZMK Contributors
 # SPDX-License-Identifier: MIT
 
-if (NOT CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
+if (NOT CONFIG_ZMK_SPLIT_ROLE_CENTRAL OR CONFIG_ZMK_SPLIT_ROLE_DYNAMIC)
   target_sources(app PRIVATE service.c)
   target_sources(app PRIVATE peripheral.c)
 endif()

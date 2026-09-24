@@ -33,6 +33,7 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #include <zmk/pointing/input_split.h>
 #include <zmk/hid_indicators_types.h>
 #include <zmk/physical_layouts.h>
+#include <zmk/split/role.h>
 
 static int start_scanning(void);
 
@@ -1272,6 +1273,11 @@ static void notify_transport_status(void) {
 }
 
 static int finish_init() {
+    if (!zmk_split_role_is_central()) {
+        LOG_DBG("Split role is peripheral; BLE split central transport stays unavailable");
+        return 0;
+    }
+
     settings_loaded = true;
 
     if (!transport_status_cb) {

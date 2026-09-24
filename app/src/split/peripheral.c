@@ -8,6 +8,7 @@
 
 #include <zmk/stdlib.h>
 #include <zmk/split/transport/peripheral.h>
+#include <zmk/split/role.h>
 
 #include <drivers/behavior.h>
 #include <zmk/behavior.h>
@@ -27,7 +28,7 @@
 
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
-const struct zmk_split_transport_peripheral *active_transport;
+const struct zmk_split_transport_peripheral *active_peripheral_transport;
 
 int zmk_split_transport_peripheral_command_handler(
     const struct zmk_split_transport_peripheral *transport,
@@ -74,12 +75,13 @@ int zmk_split_transport_peripheral_command_handler(
 }
 
 int zmk_split_peripheral_report_event(const struct zmk_split_transport_peripheral_event *event) {
-    if (!active_transport || !active_transport->api || !active_transport->api->report_event) {
+    if (!active_peripheral_transport || !active_peripheral_transport->api ||
+        !active_peripheral_transport->api->report_event) {
         LOG_WRN("No active transport that supports reporting events!");
         return -ENODEV;
     }
 
-    return active_transport->api->report_event(event);
+    return active_peripheral_transport->api->report_event(event);
 }
 
 static int select_first_available_transport(void) {
@@ -89,22 +91,22 @@ static int select_first_available_transport(void) {
     // available and fully connected.
     STRUCT_SECTION_FOREACH(zmk_split_transport_peripheral, t) {
         if (!t->api->get_status || t->api->get_status().available) {
-            if (active_transport == t) {
+            if (active_peripheral_transport == t) {
                 LOG_DBG("First available is already selected, moving on");
                 return 0;
             }
 
-            if (active_transport && active_transport->api->set_enabled) {
-                int err = active_transport->api->set_enabled(false);
+            if (active_peripheral_transport && active_peripheral_transport->api->set_enabled) {
+                int err = active_peripheral_transport->api->set_enabled(false);
                 if (err < 0) {
                     LOG_WRN("Error disabling previously selected split transport (%d)", err);
                 }
             }
 
-            active_transport = t;
+            active_peripheral_transport = t;
             int err = 0;
-            if (active_transport->api->set_enabled) {
-                err = active_transport->api->set_enabled(true);
+            if (active_peripheral_transport->api->set_enabled) {
+                err = active_peripheral_transport->api->set_enabled(true);
             }
 
             return err;
@@ -116,7 +118,7 @@ static int select_first_available_transport(void) {
 
 static int transport_status_changed_cb(const struct zmk_split_transport_peripheral *p,
                                        struct zmk_split_transport_status status) {
-    if (p == active_transport) {
+    if (p == active_peripheral_transport) {
         LOG_DBG("Peripheral at %p changed status: enabled %d, available %d, connections %d", p,
                 status.enabled, status.available, status.connections);
         if (status.connections == ZMK_SPLIT_TRANSPORT_CONNECTIONS_STATUS_DISCONNECTED) {
@@ -146,6 +148,11 @@ static int peripheral_init(void) {
 SYS_INIT(peripheral_init, APPLICATION, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT);
 
 int split_peripheral_listener(const zmk_event_t *eh) {
+    if (zmk_split_role_is_central()) {
+        /* Dynamic-role build running as central: nothing to forward. */
+        return ZMK_EV_EVENT_BUBBLE;
+    }
+
     LOG_DBG("");
     const struct zmk_position_state_changed *pos_ev;
     if ((pos_ev = as_zmk_position_state_changed(eh)) != NULL) {
