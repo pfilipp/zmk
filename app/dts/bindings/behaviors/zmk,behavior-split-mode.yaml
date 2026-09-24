@@ -1,0 +1,8 @@
+# Copyright (c) 2026 The ZMK Contributors
+# SPDX-License-Identifier: MIT
+
+description: Split Mode Behavior (dongle mode vs standalone mode)
+
+compatible: "zmk,behavior-split-mode"
+
+include: two_param.yaml

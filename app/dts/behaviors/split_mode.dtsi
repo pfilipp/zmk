@@ -1,0 +1,18 @@
+/*
+ * Copyright (c) 2026 The ZMK Contributors
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
+/ {
+    behaviors {
+        // Only instantiated when a keymap references it, so non-dual builds are untouched.
+        /omit-if-no-ref/
+        // Invoked on peripherals over the split link: node name must be <= 15 characters.
+        split_mode: splitmode {
+            compatible = "zmk,behavior-split-mode";
+            #binding-cells = <2>;
+            display-name = "Split Mode";
+        };
+    };
+};
