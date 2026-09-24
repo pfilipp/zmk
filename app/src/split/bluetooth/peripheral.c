@@ -49,6 +49,7 @@ static bool is_connected = false;
 
 static bool is_bonded = false;
 
+#if !IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_DYNAMIC)
 static void each_bond(const struct bt_bond_info *info, void *user_data) {
     bt_addr_le_t *addr = (bt_addr_le_t *)user_data;
 
@@ -56,11 +57,24 @@ static void each_bond(const struct bt_bond_info *info, void *user_data) {
         bt_addr_le_copy(addr, &info->addr);
     }
 }
+#endif
+
+static void find_central_addr(bt_addr_le_t *central_addr) {
+#if IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_DYNAMIC)
+    /* Bonds on BT_ID_DEFAULT also hold hosts and the other half; only the stored dongle counts. */
+    const bt_addr_le_t *dongle = zmk_split_role_dongle_addr();
+    if (dongle) {
+        bt_addr_le_copy(central_addr, dongle);
+    }
+#else
+    bt_foreach_bond(BT_ID_DEFAULT, each_bond, central_addr);
+#endif
+}
 
 static int start_advertising(bool low_duty) {
     bt_addr_le_t central_addr = bt_addr_le_none;
 
-    bt_foreach_bond(BT_ID_DEFAULT, each_bond, &central_addr);
+    find_central_addr(&central_addr);
 
     if (bt_addr_le_cmp(&central_addr, BT_ADDR_LE_NONE) != 0) {
         is_bonded = true;
@@ -86,6 +100,15 @@ static void advertising_cb(struct k_work *work) {
 K_WORK_DEFINE(advertising_work, advertising_cb);
 
 static void connected(struct bt_conn *conn, uint8_t err) {
+#if IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_DYNAMIC)
+    if (err == 0 && zmk_ble_profile_index(bt_conn_get_dst(conn)) >= 0) {
+        char addr[BT_ADDR_LE_STR_LEN];
+        bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+        LOG_WRN("Dropping host %s: this half is in dongle mode", addr);
+        bt_conn_disconnect(conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
+        return;
+    }
+#endif
     is_connected = (err == 0);
 
     raise_zmk_split_peripheral_status_changed(
@@ -124,6 +147,12 @@ static void security_changed(struct bt_conn *conn, bt_security_t level, enum bt_
 
     if (!err) {
         LOG_DBG("Security changed: %s level %u", addr, level);
+#if IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_DYNAMIC)
+        if (level >= BT_SECURITY_L2 && !zmk_split_role_dongle_addr()) {
+            LOG_INF("Recording %s as the dongle", addr);
+            zmk_split_role_set_dongle_addr(bt_conn_get_dst(conn));
+        }
+#endif
     } else {
         LOG_ERR("Security failed: %s level %u err %d", addr, level, err);
     }
