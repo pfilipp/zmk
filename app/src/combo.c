@@ -22,6 +22,7 @@
 #include <zmk/matrix.h>
 #include <zmk/keymap.h>
 #include <zmk/virtual_key_position.h>
+#include <zmk/split/role.h>
 
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
@@ -508,6 +509,11 @@ static int keycode_state_changed_listener(const zmk_event_t *eh) {
 }
 
 int behavior_combo_listener(const zmk_event_t *eh) {
+    if (!zmk_split_role_is_central()) {
+        /* Dongle mode: combos are resolved on the central. */
+        return ZMK_EV_EVENT_BUBBLE;
+    }
+
     if (as_zmk_position_state_changed(eh) != NULL) {
         return position_state_changed_listener(eh);
     } else if (as_zmk_keycode_state_changed(eh) != NULL) {

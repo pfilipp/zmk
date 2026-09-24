@@ -32,6 +32,7 @@
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 #include <zmk/ble.h>
+#include <zmk/split/role.h>
 #include <zmk/keys.h>
 #include <zmk/split/bluetooth/uuid.h>
 #include <zmk/event_manager.h>
@@ -182,6 +183,11 @@ int update_advertising(void) {
 #endif
 #endif
 
+    if (!zmk_split_role_is_central()) {
+        /* Dongle mode: this half is a split peripheral and must never advertise as a host keyboard. */
+        return 0;
+    }
+
     int err = 0;
     bt_addr_le_t *addr;
     struct bt_conn *conn;
@@ -311,6 +317,19 @@ int zmk_ble_prof_select(uint8_t index) {
     return 0;
 };
 
+int zmk_ble_prof_select_persist(uint8_t index) {
+    int err = zmk_ble_prof_select(index);
+    if (err) {
+        return err;
+    }
+#if IS_ENABLED(CONFIG_SETTINGS)
+    k_work_cancel_delayable(&ble_save_work);
+    return settings_save_one("ble/active_profile", &active_profile, sizeof(active_profile));
+#else
+    return 0;
+#endif
+}
+
 int zmk_ble_prof_next(void) {
     LOG_DBG("");
     return zmk_ble_prof_select((active_profile + 1) % ZMK_BLE_PROFILE_COUNT);
@@ -418,6 +437,13 @@ int zmk_ble_put_peripheral_addr(const bt_addr_le_t *addr) {
     // The peripheral does not match a known peripheral and there is no
     // available slot.
     return -ENOMEM;
+}
+
+const bt_addr_le_t *zmk_ble_peripheral_addr(uint8_t index) {
+    if (index >= ZMK_SPLIT_BLE_PERIPHERAL_COUNT) {
+        return NULL;
+    }
+    return &peripheral_addrs[index];
 }
 
 #endif /* IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL) */
@@ -726,6 +752,12 @@ static int zmk_ble_complete_startup(void) {
     }
 
 #endif // IS_ENABLED(CONFIG_ZMK_BLE_CLEAR_BONDS_ON_START)
+
+    if (!zmk_split_role_is_central()) {
+        /* Dongle mode: the split peripheral transport owns connection and pairing callbacks. */
+        LOG_INF("Split role is peripheral; host BLE profiles are dormant");
+        return 0;
+    }
 
     bt_conn_cb_register(&conn_callbacks);
     bt_conn_auth_cb_register(&zmk_ble_auth_cb_display);
