@@ -49,6 +49,8 @@ static bool is_connected = false;
 
 static bool is_bonded = false;
 
+#if !IS_ENABLED(CONFIG_ZMK_SPLIT_PERIPHERAL_MULTI_BOND)
+
 #if !IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_DYNAMIC)
 static void each_bond(const struct bt_bond_info *info, void *user_data) {
     bt_addr_le_t *addr = (bt_addr_le_t *)user_data;
@@ -86,6 +88,54 @@ static int start_advertising(bool low_duty) {
         return bt_le_adv_start(BT_LE_ADV_CONN_FAST_2, zmk_ble_ad, ARRAY_SIZE(zmk_ble_ad), NULL, 0);
     }
 };
+
+#else
+
+static void add_bond_to_accept_list(const struct bt_bond_info *info, void *user_data) {
+    int *count = user_data;
+    char addr[BT_ADDR_LE_STR_LEN];
+
+    bt_addr_le_to_str(&info->addr, addr, sizeof(addr));
+
+    int err = bt_le_filter_accept_list_add(&info->addr);
+    if (err) {
+        LOG_ERR("Failed to add %s to the filter accept list (%d)", addr, err);
+        return;
+    }
+
+    LOG_DBG("Accepting central %s", addr);
+    (*count)++;
+}
+
+/* Advertise to every bonded central at once; whichever is currently the active central connects.
+ * Interval matches the low-duty directed advertising the single-bond path settles into, so idle
+ * power is comparable. The low_duty flag is meaningless for undirected advertising. */
+static int start_advertising(bool low_duty) {
+    ARG_UNUSED(low_duty);
+    int count = 0;
+
+    int err = bt_le_filter_accept_list_clear();
+    if (err) {
+        LOG_ERR("Failed to clear the filter accept list (%d)", err);
+        return err;
+    }
+
+    bt_foreach_bond(BT_ID_DEFAULT, add_bond_to_accept_list, &count);
+
+    if (count > 0) {
+        is_bonded = true;
+        return bt_le_adv_start(BT_LE_ADV_PARAM(BT_LE_ADV_OPT_CONN | BT_LE_ADV_OPT_FILTER_CONN |
+                                                   BT_LE_ADV_OPT_FILTER_SCAN_REQ,
+                                               BT_GAP_ADV_FAST_INT_MIN_2, BT_GAP_ADV_FAST_INT_MAX_2,
+                                               NULL),
+                               zmk_ble_ad, ARRAY_SIZE(zmk_ble_ad), NULL, 0);
+    }
+
+    is_bonded = false;
+    return bt_le_adv_start(BT_LE_ADV_CONN_FAST_2, zmk_ble_ad, ARRAY_SIZE(zmk_ble_ad), NULL, 0);
+}
+
+#endif
 
 static bool low_duty_advertising = false;
 static bool enabled = false;
