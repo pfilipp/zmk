@@ -18,6 +18,9 @@
 #include <zmk/behavior.h>
 #include <zmk/split/role.h>
 #include <zmk/events/position_state_changed.h>
+#if IS_ENABLED(CONFIG_ZMK_SPLIT_BLE)
+#include <zmk/split/bluetooth/service.h>
+#endif
 
 #if IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_DYNAMIC)
 #include <zmk/ble.h>
@@ -179,6 +182,13 @@ static const struct behavior_driver_api behavior_split_mode_driver_api = {
     .get_parameter_metadata = zmk_behavior_get_empty_param_metadata,
 #endif
 };
+
+#if IS_ENABLED(CONFIG_ZMK_SPLIT_BLE)
+/* The BLE split link forwards behaviors by device name in a fixed 9-byte field; a longer node
+ * name is silently truncated on the wire and the peripheral then finds no such behavior. */
+BUILD_ASSERT(sizeof(DEVICE_DT_NAME(DT_DRV_INST(0))) <= ZMK_SPLIT_RUN_BEHAVIOR_DEV_LEN,
+             "split_mode node name must be at most 8 characters");
+#endif
 
 BEHAVIOR_DT_INST_DEFINE(0, NULL, NULL, NULL, NULL, POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT,
                         &behavior_split_mode_driver_api);

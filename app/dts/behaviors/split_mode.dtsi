@@ -8,8 +8,9 @@
     behaviors {
         // Only instantiated when a keymap references it, so non-dual builds are untouched.
         /omit-if-no-ref/
-        // Invoked on peripherals over the split link: node name must be <= 15 characters.
-        split_mode: splitmode {
+        // Invoked on peripherals over the split link, which carries the device name in
+        // ZMK_SPLIT_RUN_BEHAVIOR_DEV_LEN (9) bytes: the node name must be <= 8 characters.
+        split_mode: splmode {
             compatible = "zmk,behavior-split-mode";
             #binding-cells = <2>;
             display-name = "Split Mode";
