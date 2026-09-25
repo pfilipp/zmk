@@ -22,7 +22,7 @@ struct bt_conn;
 
 bool zmk_split_role_is_central(void);
 enum zmk_split_mode zmk_split_role_get_mode(void);
-/* Persists synchronously. Takes effect on the next boot. */
+/* Persists the mode for the next boot. The running role does not change until then. */
 int zmk_split_role_set_mode(enum zmk_split_mode mode);
 
 /* Address of the dongle this half bonded to while in dongle mode, or NULL if unknown. */

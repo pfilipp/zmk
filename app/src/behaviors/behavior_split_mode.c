@@ -9,6 +9,7 @@
 #include <zephyr/device.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/reboot.h>
+#include <zephyr/bluetooth/bluetooth.h> /* bt_le_scan_stop / bt_le_adv_stop */
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/logging/log.h>
 
@@ -32,10 +33,16 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 #if IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_DYNAMIC)
 
-/* Time for the settings write and any in-flight split command to complete before we drop links. */
+/* Leave the BLE callback that delivered the command; the switch work persists, drops links and
+ * reboots. */
 #define SWITCH_DELAY_MS 100
 /* Time for the disconnects to go out on air before the reboot. */
 #define REBOOT_DELAY_MS 300
+
+/* Request captured at key press, acted on from the system work queue. */
+static enum zmk_split_mode pending_mode;
+static bool pending_profile_set;
+static uint8_t pending_profile;
 
 static void reboot_work_cb(struct k_work *work) {
     LOG_INF("Rebooting into new split mode");
@@ -49,9 +56,38 @@ static void disconnect_conn(struct bt_conn *conn, void *data) {
 }
 
 static void switch_work_cb(struct k_work *work) {
-    /* Block every advertising/scanning restart that the disconnects would otherwise trigger. */
+    int err;
+
+    if (pending_profile_set) {
+        err = zmk_ble_prof_select_persist(pending_profile);
+        if (err) {
+            LOG_ERR("Failed to select host profile %d (%d); mode switch aborted", pending_profile,
+                    err);
+            return;
+        }
+    }
+
+    err = zmk_split_role_set_mode(pending_mode);
+    if (err) {
+        LOG_ERR("Failed to persist split mode %d (%d); mode switch aborted", pending_mode, err);
+        return;
+    }
+
+    /* Block every advertising/scanning restart that the disconnects would otherwise trigger,
+     * and stop whatever is running now so nothing connects inside the reboot window. */
     zmk_split_role_set_switch_pending();
+    err = bt_le_scan_stop();
+    if (err && err != -EALREADY) {
+        LOG_DBG("Scan stop: %d", err);
+    }
+    err = bt_le_adv_stop();
+    if (err && err != -EALREADY) {
+        LOG_DBG("Advertising stop: %d", err);
+    }
+
     bt_conn_foreach(BT_CONN_TYPE_LE, disconnect_conn, NULL);
+    LOG_INF("Split mode -> %s, rebooting shortly",
+            pending_mode == ZMK_SPLIT_MODE_DONGLE ? "dongle" : "standalone");
     k_work_schedule(&reboot_work, K_MSEC(REBOOT_DELAY_MS));
 }
 
@@ -59,19 +95,26 @@ static K_WORK_DELAYABLE_DEFINE(switch_work, switch_work_cb);
 
 static int handle_pressed(struct zmk_behavior_binding *binding,
                           struct zmk_behavior_binding_event event) {
-    enum zmk_split_mode requested = (binding->param1 == SPLIT_MODE_DONGLE_CMD)
-                                        ? ZMK_SPLIT_MODE_DONGLE
-                                        : ZMK_SPLIT_MODE_STANDALONE;
+    bool host_cmd = binding->param1 == SPLIT_MODE_HOST_CMD;
+    enum zmk_split_mode requested = host_cmd ? ZMK_SPLIT_MODE_STANDALONE : ZMK_SPLIT_MODE_DONGLE;
 
-    if (binding->param1 == SPLIT_MODE_HOST_CMD) {
-        int err = zmk_ble_prof_select_persist(binding->param2);
-        if (err) {
-            LOG_ERR("Failed to select host profile %d (%d)", binding->param2, err);
-        }
+    if (host_cmd && binding->param2 >= ZMK_BLE_PROFILE_COUNT) {
+        LOG_ERR("Host profile %d out of range (max %d)", binding->param2,
+                ZMK_BLE_PROFILE_COUNT - 1);
+        return ZMK_BEHAVIOR_OPAQUE;
     }
 
     if (requested == zmk_split_role_get_mode()) {
-        LOG_DBG("Already in split mode %d", requested);
+        if (host_cmd) {
+            /* Already standalone: just change the host profile, no reboot. This runs on the
+             * system work queue (local keymap), never in a BLE callback. */
+            int err = zmk_ble_prof_select_persist(binding->param2);
+            if (err) {
+                LOG_ERR("Failed to select host profile %d (%d)", binding->param2, err);
+            }
+        } else {
+            LOG_DBG("Already in dongle mode");
+        }
         return ZMK_BEHAVIOR_OPAQUE;
     }
 
@@ -80,14 +123,9 @@ static int handle_pressed(struct zmk_behavior_binding *binding,
         return ZMK_BEHAVIOR_OPAQUE;
     }
 
-    int err = zmk_split_role_set_mode(requested);
-    if (err) {
-        LOG_ERR("Failed to persist split mode %d (%d)", requested, err);
-        return ZMK_BEHAVIOR_OPAQUE;
-    }
-
-    LOG_INF("Split mode -> %s, rebooting shortly",
-            requested == ZMK_SPLIT_MODE_DONGLE ? "dongle" : "standalone");
+    pending_mode = requested;
+    pending_profile_set = host_cmd;
+    pending_profile = binding->param2;
     k_work_schedule(&switch_work, K_MSEC(SWITCH_DELAY_MS));
     return ZMK_BEHAVIOR_OPAQUE;
 }

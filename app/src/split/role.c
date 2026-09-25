@@ -27,8 +27,10 @@ bool zmk_split_role_is_central(void) { return current_mode == ZMK_SPLIT_MODE_STA
 enum zmk_split_mode zmk_split_role_get_mode(void) { return current_mode; }
 
 int zmk_split_role_set_mode(enum zmk_split_mode mode) {
-    current_mode = mode;
-    return settings_save_one("split/mode", &current_mode, sizeof(current_mode));
+    uint8_t val = mode;
+
+    /* The running role is fixed at boot; the new mode takes effect after the reboot. */
+    return settings_save_one("split/mode", &val, sizeof(val));
 }
 
 const bt_addr_le_t *zmk_split_role_dongle_addr(void) {

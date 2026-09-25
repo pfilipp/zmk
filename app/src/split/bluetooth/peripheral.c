@@ -150,6 +150,14 @@ static void advertising_cb(struct k_work *work) {
         return;
     }
 
+#if IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_DYNAMIC)
+    if (is_connected) {
+        /* recycled() also fires for a dropped host; the central link is still up. */
+        LOG_DBG("Already connected to the central; not advertising");
+        return;
+    }
+#endif
+
     const int err = start_advertising(low_duty_advertising);
     if (err < 0) {
         LOG_ERR("Failed to start advertising (%d)", err);
@@ -192,6 +200,13 @@ static void disconnected(struct bt_conn *conn, uint8_t reason) {
     bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
 
     LOG_DBG("Disconnected from %s (reason 0x%02x)", addr, reason);
+
+#if IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_DYNAMIC)
+    if (zmk_ble_profile_index(bt_conn_get_dst(conn)) >= 0) {
+        /* A host the guard dropped; the split link (if any) is untouched. */
+        return;
+    }
+#endif
 
     is_connected = false;
 
@@ -246,10 +261,11 @@ split_peripheral_bt_set_status_callback(zmk_split_transport_peripheral_status_ch
     return 0;
 }
 
-static void find_first_conn(struct bt_conn *conn, void *data) {
-    struct bt_conn **cp = (struct bt_conn **)data;
-
-    *cp = conn;
+static void disconnect_each(struct bt_conn *conn, void *data) {
+    int err = bt_conn_disconnect(conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
+    if (err < 0) {
+        LOG_WRN("Failed to disconnect connection to central (%d)", err);
+    }
 }
 
 static int split_peripheral_bt_set_enabled(bool en) {
@@ -260,14 +276,7 @@ static int split_peripheral_bt_set_enabled(bool en) {
         k_work_submit(&advertising_work);
         return 0;
     } else {
-        struct bt_conn *conn = NULL;
-        bt_conn_foreach(BT_CONN_TYPE_LE, find_first_conn, &conn);
-        if (conn) {
-            err = bt_conn_disconnect(conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
-            if (err < 0) {
-                LOG_WRN("Failed to disconnect connection to central (%d)", err);
-            }
-        }
+        bt_conn_foreach(BT_CONN_TYPE_LE, disconnect_each, NULL);
 
         err = bt_le_adv_stop();
 
