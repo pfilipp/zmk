@@ -180,6 +180,12 @@ ssize_t bt_gatt_attr_read_input_split_cpf(struct bt_conn *conn, const struct bt_
         BT_GATT_DESCRIPTOR(BT_UUID_GATT_CPF, BT_GATT_PERM_READ, bt_gatt_attr_read_input_split_cpf, \
                            NULL, (void *)DT_REG_ADDR(node_id)),
 
+/* Only a node with a `device` forwards a local input source. A node without one is the central
+ * side's proxy (a dynamic-role build carries both), and exposing it would make a connecting
+ * central waste an input subscription slot on a characteristic that never notifies. */
+#define INPUT_SPLIT_CHARS_IF_SOURCE(node_id)                                                       \
+    COND_CODE_1(DT_NODE_HAS_PROP(node_id, device), (INPUT_SPLIT_CHARS(node_id)), ())
+
 #endif
 
 BT_GATT_SERVICE_DEFINE(
@@ -199,7 +205,7 @@ BT_GATT_SERVICE_DEFINE(
                            split_svc_sensor_state, NULL, &last_sensor_event),
     BT_GATT_CCC(split_svc_sensor_state_ccc, BT_GATT_PERM_READ_ENCRYPT | BT_GATT_PERM_WRITE_ENCRYPT),
 #endif /* ZMK_KEYMAP_HAS_SENSORS */
-    DT_FOREACH_STATUS_OKAY(zmk_input_split, INPUT_SPLIT_CHARS)
+    DT_FOREACH_STATUS_OKAY(zmk_input_split, INPUT_SPLIT_CHARS_IF_SOURCE)
 #if IS_ENABLED(CONFIG_ZMK_SPLIT_PERIPHERAL_HID_INDICATORS)
         BT_GATT_CHARACTERISTIC(BT_UUID_DECLARE_128(ZMK_SPLIT_BT_UPDATE_HID_INDICATORS_UUID),
                                BT_GATT_CHRC_WRITE_WITHOUT_RESP, BT_GATT_PERM_WRITE_ENCRYPT, NULL,
